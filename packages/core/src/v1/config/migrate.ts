@@ -134,7 +134,7 @@ function migrateStandardProvider(info: ConfigProviderV1.Info) {
     body: info.options && options.body,
     models:
       info.models &&
-      Object.fromEntries(Object.entries(info.models).map(([name, model]) => [name, migrateModel(model, info.npm)])),
+      Object.fromEntries(Object.entries(info.models).map(([name, model]) => [name, migrateModel(name, model, info.npm)])),
   }
 }
 
@@ -186,7 +186,7 @@ export function providerID(input: string) {
   return input
 }
 
-function migrateModel(info: typeof ConfigProviderV1.Model.Type, npm: string | undefined) {
+function migrateModel(name: string, info: typeof ConfigProviderV1.Model.Type, npm: string | undefined) {
   const disableThinkingBlockBinding =
     info.options?.thinking?.blockBinding === false || info.options?.reasoningConfig?.blockBinding === false
   const options = info.options && { ...info.options }
@@ -206,6 +206,11 @@ function migrateModel(info: typeof ConfigProviderV1.Model.Type, npm: string | un
   }
 
   const compatible = (info.provider?.npm ?? npm) === "@ai-sdk/openai-compatible"
+  // V1 marked requests using both the configured model alias and the upstream model ID.
+  const cacheFormat =
+    compatible && [name, info.id].some((id) => id?.includes("claude") || id?.includes("anthropic"))
+      ? ("anthropic" as const)
+      : undefined
   const split = (input: Record<string, unknown>) =>
     compatible
       ? ConfigProviderOptionsV1.compatibleModel(input)
@@ -238,9 +243,14 @@ function migrateModel(info: typeof ConfigProviderV1.Model.Type, npm: string | un
     modelID: info.id,
     family: info.family,
     name: info.name,
-    compatibility: disableThinkingBlockBinding
-      ? { ...compatibility, supportsThinkingBlockBinding: false }
-      : compatibility,
+    compatibility:
+      disableThinkingBlockBinding || cacheFormat
+        ? {
+            ...compatibility,
+            ...(disableThinkingBlockBinding && { supportsThinkingBlockBinding: false }),
+            ...(cacheFormat && { cacheFormat }),
+          }
+        : compatibility,
     package: info.provider?.npm ? packageSpecifier(info.provider.npm) : undefined,
     settings: info.provider?.api ? { ...settings, baseURL: info.provider.api } : settings,
     capabilities,

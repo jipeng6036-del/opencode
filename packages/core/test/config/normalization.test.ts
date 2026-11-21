@@ -785,6 +785,30 @@ describe("ConfigNormalize", () => {
     expect(result.encoded.providers).not.toHaveProperty(["gateway", "models", "untouched", "compatibility"])
   })
 
+  test("keeps V1 Anthropic cache markers on matching OpenAI-compatible models", () => {
+    const config = decoded({
+      provider: {
+        proxy: {
+          npm: "@ai-sdk/openai-compatible",
+          models: {
+            partner: { id: "claude-sonnet-5-5", interleaved: { field: "reasoning_content" } },
+            "anthropic-local": { id: "vendor-model" },
+            gpt: { id: "gpt-5" },
+            "claude-native": { provider: { npm: "@ai-sdk/anthropic" } },
+          },
+        },
+      },
+    })
+    const models = config.providers?.proxy?.models
+    expect(models?.partner?.compatibility).toMatchObject({
+      cacheFormat: "anthropic",
+      reasoningField: "reasoning_content",
+    })
+    expect(models?.["anthropic-local"]?.compatibility).toMatchObject({ cacheFormat: "anthropic" })
+    expect(models?.gpt?.compatibility).toBeUndefined()
+    expect(models?.["claude-native"]?.compatibility).toBeUndefined()
+  })
+
   test("migrates the legacy setCacheKey provider option into provider compatibility", () => {
     const result = normalized({
       provider: {
